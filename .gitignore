@@ -19,3 +19,6 @@ typechain
 #Hardhat files
 cache
 artifacts
+
+.env
+.DS_Store
