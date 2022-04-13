@@ -1,65 +1,90 @@
 //SPDX-License-Identifier: Unlicense
 pragma solidity ^0.8.4;
 
-// ввывода коммиссии
+import "hardhat/console.sol";
+
 // доп view функции для вывода информации о голосовании и участниках
 
-contract Voting{
+contract Voting {
     
     // candidate
     struct Candidate {
-        uint id;
         string name;
         uint votes;
         address payable wallet;
     }
 
     struct Poll {
-        uint id;
-        string name;
-
+        string name; 
         Candidate[] candidates;
-        mapping(uint => Candidate) cands;
-
         uint end;
         bool closed;
         address payable wallet;
     }
-
+     
     // admin address
-    address public admin;
-
-    // map of polls
-    mapping(uint => Poll) polls;
-
-    // voters
+    address payable public admin;
+    // address payable platform;
+    // map of polls [poll name -> poll struct]
+    mapping(string => Poll) polls;
+    // voters [voter address -> sign the voter voted]
     mapping(address => bool) public voters;
-    // next id 
-    uint nextPollId;
     // voter has link which poll it voted
-    mapping(address => mapping(uint => bool)) votes;
+    mapping(address => mapping(string => bool)) votes;
     // 3 days
     uint offsetInDays = 3 * 24 * 60 * 60;
-    uint amount = 10000000000000000 wei; // 0.01 eth
-    uint amount2 = 10000000 gwei; // 0.01 eth
+    // commission fee
+    uint256 fee = 0.01 ether; // fee
+
+    string[] pollNames;
     
     constructor(){
-        admin = msg.sender;
+        admin = payable(msg.sender);
+        console.log('admin address:', admin,'owner balance:', admin.balance); 
     }
     
-    // create vote
-    function createPoll(string memory name, string[] memory candidates, address payable[] calldata wlts) public onlyAdmin {
-        polls[nextPollId].id = nextPollId;
-        polls[nextPollId].name = name;
-        polls[nextPollId].end = block.timestamp + offsetInDays;
+    // create Poll
+    function createPoll(string memory name, address payable pollWallet, string[] memory candidates, address payable[] calldata wlts) public onlyAdmin {
+        polls[name].name = name;
+        polls[name].wallet = pollWallet;
+        polls[name].end = block.timestamp + offsetInDays;
+
 
         for(uint i = 0; i < candidates.length; i++){
-            polls[nextPollId].candidates.push(Candidate(i, candidates[i], 0, wlts[i]));
+            polls[name].candidates.push(Candidate(candidates[i], 0, wlts[i]));
+        }
+    }
+
+     // close poll
+    function closePoll(string memory pollName) external onlyAdmin() {
+        polls[pollName].closed = true;
+
+        Candidate memory winnerCandidate = polls[pollName].candidates[0];
+
+        // find winer 
+        for(uint i = 1; i < polls[pollName].candidates.length; i++){
+            if(polls[pollName].candidates[i].votes > winnerCandidate.votes){
+                winnerCandidate = polls[pollName].candidates[i];
+            }
         }
 
-        nextPollId++;
+        //todo what if there is no one voted?
+
+        string memory winner = winnerCandidate.name;
+        console.log('winner', winner);
+        
+        // send money to winner minus 10%
+        uint fee10 = (10 * polls[pollName].wallet.balance) / 100;
+        console.log('fee10', fee10);
+        
+        uint balance = polls[pollName].wallet.balance - fee10;
+        winnerCandidate.wallet.transfer(balance); 
+        console.log('send ', winnerCandidate.name, ' amount ', balance);
+
+        // todo send 10% to platform
+        admin.transfer(fee10); 
     }
-    
+
     // add voter
     function addVoter(address payable voter) external onlyAdmin(){
         voters[voter] = true;
@@ -69,35 +94,48 @@ contract Voting{
     function addVoters(address[] calldata _voters) external onlyAdmin() {
         for(uint i = 0; i < _voters.length; i++) {
             voters[_voters[i]] = true;
-            // addVoter(_voters[i]);
         }
     }
 
-    // участия в голосованииs
-    function vote(uint pollId, uint choiceId) external {
-        
+
+    // get fee amount
+    function getPolls() view external onlyAdmin() returns(string[] memory) {
+        return pollNames;
+    }
+  
+
+    function vote(string memory pollName, uint candidateIndex) public payable{
+        console.log('\nvoting', msg.sender);
+
         require(voters[msg.sender] == true, "only voters can vote");
-        require(votes[msg.sender][pollId] == false, "voter can only vote once for a poll");
-        require(polls[pollId].end > block.timestamp, 'can only vote until poll end date');
-        require(polls[pollId].closed == false, 'poll is closed');
-        // 0.01 ETH
-        require(msg.sender.balance >= 100, 'to vote need 0.01 ETH');
-        // require(msg.sender.send());
-        //
-        votes[msg.sender][pollId] = true;
+        require(votes[msg.sender][pollName] == false, "voter can only vote once for a poll");
+        require(polls[pollName].end > block.timestamp, 'can only vote until poll end date');
+        require(polls[pollName].closed == false, 'poll is closed');
+        // Check whether the voter has the necessary funds to pay the fee
+        require(msg.sender.balance >= fee, 'Not enough funds to vote');
+        // transfer commission to platform
+        // require(platform.send(fee), 'Could not pay fee');
 
-        // msg.sender.balance.send(100);
-        polls[pollId].wallet.transfer(100);
-        
-        polls[pollId].candidates[choiceId].votes++;
+        console.log('msg sender balance', msg.sender.balance, 'fee', fee);
+        console.log('transfer from', msg.sender, ' to', polls[pollName].wallet);
 
+        polls[pollName].wallet.transfer(fee);
+
+        // (bool success, ) = polls[pollName].wallet.call{value: fee}("");
+        // require(success, "Failed to send Ether");
+
+        // save flag that voter has voted for poll
+        votes[msg.sender][pollName] = true;
+
+        // increment votes for candidate
+        polls[pollName].candidates[candidateIndex].votes++;
     }
-
-    function closePoll(uint pollId) external onlyAdmin() {
-        polls[pollId].closed = true;
+  
+    // ввывода коммиссии
+    function getCommission() public view onlyAdmin() returns(uint) {
+        return admin.balance;
     }
-
-
+    
     modifier onlyAdmin() {
         require(msg.sender == admin, "only admin");
         _;
