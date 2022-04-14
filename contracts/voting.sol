@@ -32,7 +32,7 @@ contract Voting {
     // voter has link which poll it voted
     mapping(address => mapping(string => bool)) votes;
     // 3 days
-    uint offsetInDays = 3 * 24 * 60 * 60;
+    uint offsetInDays = 3 days;
     // commission fee
     uint256 fee = 0.01 ether; // fee
 
@@ -45,20 +45,26 @@ contract Voting {
     
     // create Poll
     function createPoll(string memory name, address payable pollWallet, string[] memory candidates, address payable[] calldata wlts) public onlyAdmin {
+        console.log("name", name, "balance", pollWallet.balance);
+
         polls[name].name = name;
         polls[name].wallet = pollWallet;
         polls[name].end = block.timestamp + offsetInDays;
 
-
         for(uint i = 0; i < candidates.length; i++){
             polls[name].candidates.push(Candidate(candidates[i], 0, wlts[i]));
         }
+
+        pollNames.push(name);
     }
 
      // close poll
-    function closePoll(string memory pollName) external onlyAdmin() {
-        polls[pollName].closed = true;
+    function closePoll(string memory pollName) external payable onlyAdmin() {
+        console.log();
+        console.log("closing poll");
 
+        polls[pollName].closed = true;
+ 
         Candidate memory winnerCandidate = polls[pollName].candidates[0];
 
         // find winer 
@@ -73,16 +79,22 @@ contract Voting {
         string memory winner = winnerCandidate.name;
         console.log('winner', winner);
         
+        console.log('poll ', pollName, 'balance is', polls[pollName].wallet.balance);
+
         // send money to winner minus 10%
         uint fee10 = (10 * polls[pollName].wallet.balance) / 100;
         console.log('fee10', fee10);
         
-        uint balance = polls[pollName].wallet.balance - fee10;
-        winnerCandidate.wallet.transfer(balance); 
-        console.log('send ', winnerCandidate.name, ' amount ', balance);
+        uint amount = polls[pollName].wallet.balance - fee10;
+        console.log('amount', amount, 'msgSender', msg.sender);
+        
+        console.log('transfer from', msg.sender, 'to', winnerCandidate.wallet);
+        // 
+        winnerCandidate.wallet.transfer(amount); 
+        // console.log('send ', winnerCandidate.name, ' amount ', balance);
 
-        // todo send 10% to platform
-        admin.transfer(fee10); 
+        // send 10% to platform
+        // admin.transfer(fee10); 
     }
 
     // add voter
@@ -97,13 +109,12 @@ contract Voting {
         }
     }
 
-
-    // get fee amount
+    // get poll names
     function getPolls() view external onlyAdmin() returns(string[] memory) {
         return pollNames;
     }
   
-
+    // vote
     function vote(string memory pollName, uint candidateIndex) public payable{
         console.log('\nvoting', msg.sender);
 
@@ -114,12 +125,14 @@ contract Voting {
         // Check whether the voter has the necessary funds to pay the fee
         require(msg.sender.balance >= fee, 'Not enough funds to vote');
         // transfer commission to platform
-        // require(platform.send(fee), 'Could not pay fee');
+        // require(polls[pollName].wallet.send(fee), 'Could not pay fee');
 
+        console.log('msg sender value', msg.value );
         console.log('msg sender balance', msg.sender.balance, 'fee', fee);
         console.log('transfer from', msg.sender, ' to', polls[pollName].wallet);
 
-        polls[pollName].wallet.transfer(fee);
+        // polls[pollName].wallet.transfer(fee);
+        admin.transfer(fee);
 
         // (bool success, ) = polls[pollName].wallet.call{value: fee}("");
         // require(success, "Failed to send Ether");
@@ -137,7 +150,10 @@ contract Voting {
     }
     
     modifier onlyAdmin() {
-        require(msg.sender == admin, "only admin");
+        require(msg.sender == admin, "Only admin");
+         // Do not forget the "_;"! It will
+        // be replaced by the actual function
+        // body when the modifier is used.
         _;
     }
 }
