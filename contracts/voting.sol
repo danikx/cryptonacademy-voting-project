@@ -3,8 +3,6 @@ pragma solidity ^0.8.4;
 
 import "hardhat/console.sol";
 
-// доп view функции для вывода информации о голосовании и участниках
-
 contract Voting {
     
     // candidate
@@ -19,7 +17,8 @@ contract Voting {
         Candidate[] candidates;
         uint end;
         bool closed;
-        address payable wallet;
+        address payable wallet2;
+        uint fee;
     }
     
     // 
@@ -46,7 +45,7 @@ contract Voting {
     
     constructor(){
         admin = payable(msg.sender);
-        console.log('admin address:', admin,'owner balance:', admin.balance); 
+        console.log('admin address:', admin, 'owner balance:', admin.balance); 
     }
     
     // create Poll
@@ -54,7 +53,7 @@ contract Voting {
         console.log("name", name, "balance", pollWallet.balance);
 
         polls[name].name = name;
-        polls[name].wallet = pollWallet;
+        // polls[name].wallet = pollWallet;
         polls[name].end = block.timestamp + offsetInDays;
 
         for(uint i = 0; i < candidates.length; i++){
@@ -66,43 +65,12 @@ contract Voting {
     }
 
      // close poll
-    function closePoll(string memory pollName) external payable onlyAdmin() {
-        console.log();
-        console.log("closing poll");
+    function closePoll(string memory pollName) external { 
+        console.log("Closing poll:", polls[pollName].end,  'vs ', block.timestamp);
+        require(polls[pollName].end < block.timestamp, 'can be closed after poll end date');
 
-        polls[pollName].closed = true;
- 
-        Candidate memory winnerCandidate = polls[pollName].candidates[0];
-
-        // find winer 
-        for(uint i = 1; i < polls[pollName].candidates.length; i++){
-            if(polls[pollName].candidates[i].votes > winnerCandidate.votes){
-                winnerCandidate = polls[pollName].candidates[i];
-            }
-        }
-
-        //todo what if there is no one voted?
-
-        string memory winner = winnerCandidate.name;
-        console.log('winner', winner);
-        
-        console.log('poll ', pollName, 'balance is', polls[pollName].wallet.balance);
-
-        // send money to winner minus 10%
-        uint fee10 = (10 * polls[pollName].wallet.balance) / 100;
-        console.log('fee10', fee10);
-        
-        uint amount = polls[pollName].wallet.balance - fee10;
-        console.log('amount', amount, 'msgSender', msg.sender);
-        
-        console.log('transfer from', msg.sender, 'to', winnerCandidate.wallet);
-        // 
-        winnerCandidate.wallet.transfer(amount); 
-        // console.log('send ', winnerCandidate.name, ' amount ', balance);
-
-        // send 10% to platform
-        // admin.transfer(fee10); 
-
+        console.log("Closing poll:", pollName);
+        polls[pollName].closed = true; 
         emit PollClosedEvent(pollName);
     }
 
@@ -119,33 +87,80 @@ contract Voting {
         }
     }
 
-    // get poll names
-    function getPolls() view external onlyAdmin() returns(string[] memory) {
-        return pollNames;
+    function pollWinner(string memory pollName) external view returns(string memory candidateName, uint candidateVotes) {
+        //require(polls[pollName].end < block.timestamp, 'can be closed after poll end date');
+        require(polls[pollName].closed == true, "Poll is not closed");
+
+        Candidate memory winnerCandidate = polls[pollName].candidates[0];
+
+        // find winer 
+        for(uint i = 1; i < polls[pollName].candidates.length; i++){
+            if(polls[pollName].candidates[i].votes > winnerCandidate.votes){
+                winnerCandidate = polls[pollName].candidates[i];
+            }
+        }
+
+        return (winnerCandidate.name, winnerCandidate.votes);
     }
-  
+
+    function sentWinnerCommission(string memory pollName) external payable onlyAdmin(){
+        require(polls[pollName].closed == true, "Poll is not closed");
+        
+        Candidate memory winnerCandidate = polls[pollName].candidates[0];
+
+        // find winer 
+        for(uint i = 1; i < polls[pollName].candidates.length; i++){
+            if(polls[pollName].candidates[i].votes > winnerCandidate.votes){
+                winnerCandidate = polls[pollName].candidates[i];
+            }
+        }
+
+        winnerCandidate.wallet.transfer(msg.value);
+    }
+
+    function getWinnerCommission(string memory pollName) external view onlyAdmin() returns (uint amount) {
+        Candidate memory winnerCandidate = polls[pollName].candidates[0];
+
+        // find winer 
+        for(uint i = 1; i < polls[pollName].candidates.length; i++){
+            if(polls[pollName].candidates[i].votes > winnerCandidate.votes){
+                winnerCandidate = polls[pollName].candidates[i];
+            }
+        }
+
+        //todo what if there is no one voted? 
+        
+
+        uint fee10 = (10 * polls[pollName].fee) / 100;
+        return  polls[pollName].fee - fee10;
+    }
+ 
+    // how to send money
+    //
+    // // (bool success, ) = polls[pollName].wallet.call{value: fee}("");
+    // require(success, "Failed to send Ether");
+    //
+    //
+    //
+
+
     // vote
-    function vote(string memory pollName, uint candidateIndex) public payable{
-        console.log('\nvoting', msg.sender);
+    function vote(string memory pollName, uint candidateIndex) public payable {
+        console.log('Voting', msg.sender);
 
         require(voters[msg.sender] == true, "only voters can vote");
         require(votes[msg.sender][pollName] == false, "voter can only vote once for a poll");
-        require(polls[pollName].end > block.timestamp, 'can only vote until poll end date');
         require(polls[pollName].closed == false, 'poll is closed');
+        require(polls[pollName].end > block.timestamp, 'can only vote until poll end date');
         // Check whether the voter has the necessary funds to pay the fee
         require(msg.sender.balance >= fee, 'Not enough funds to vote');
-        // transfer commission to platform
-        // require(polls[pollName].wallet.send(fee), 'Could not pay fee');
-
-        console.log('msg sender value', msg.value );
-        console.log('msg sender balance', msg.sender.balance, 'fee', fee);
-        console.log('transfer from', msg.sender, ' to', polls[pollName].wallet);
-
+         
         // polls[pollName].wallet.transfer(fee);
         admin.transfer(fee);
 
-        // (bool success, ) = polls[pollName].wallet.call{value: fee}("");
-        // require(success, "Failed to send Ether");
+        polls[pollName].fee += fee;
+
+        console.log("poll balance fee", polls[pollName].fee);
 
         // save flag that voter has voted for poll
         votes[msg.sender][pollName] = true;
@@ -156,11 +171,13 @@ contract Voting {
         emit VoteEvent(pollName, candidateIndex);
     }
   
-    // ввывода коммиссии
-    function getCommission() public view onlyAdmin() returns(uint) {
-        return admin.balance;
-    }
+    // view functions
     
+     // get poll names
+    function getPolls() view external onlyAdmin() returns(string[] memory) {
+        return pollNames;
+    }
+     
     modifier onlyAdmin() {
         require(msg.sender == admin, "Only admin");
          // Do not forget the "_;"! It will
