@@ -21,7 +21,13 @@ contract Voting {
         bool closed;
         address payable wallet;
     }
-     
+    
+    // 
+    event PollCreatedEvent(string name);
+    event PollClosedEvent(string name);
+    event AddingVotersEvent(address voterAddress);
+    event VoteEvent(string pollName, uint candidateIndex);
+
     // admin address
     address payable public admin;
     // address payable platform;
@@ -56,6 +62,7 @@ contract Voting {
         }
 
         pollNames.push(name);
+        emit PollCreatedEvent(name);
     }
 
      // close poll
@@ -95,6 +102,8 @@ contract Voting {
 
         // send 10% to platform
         // admin.transfer(fee10); 
+
+        emit PollClosedEvent(pollName);
     }
 
     // add voter
@@ -106,6 +115,7 @@ contract Voting {
     function addVoters(address[] calldata _voters) external onlyAdmin() {
         for(uint i = 0; i < _voters.length; i++) {
             voters[_voters[i]] = true;
+             emit AddingVotersEvent(_voters[i]);
         }
     }
 
@@ -142,6 +152,8 @@ contract Voting {
 
         // increment votes for candidate
         polls[pollName].candidates[candidateIndex].votes++;
+
+        emit VoteEvent(pollName, candidateIndex);
     }
   
     // ввывода коммиссии

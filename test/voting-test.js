@@ -4,62 +4,64 @@ const { add } = require("lodash");
 const { pool } = require("workerpool");
 
 describe("Voting", function () {
+   
+  it("Create a poll", async function(){
+    const voting = await ethers.getContractFactory("Voting");
+    const voter = await voting.deploy(); 
+
+    const [admin, candWallet1, candWallet2] = await ethers.getSigners();
   
-  // it("Create Poll", async function () {
-  //   const Voting = await ethers.getContractFactory("Voting");
-  //   const voter = await Voting.deploy();
-  //   await voter.deployed();
+    pollName = "cities";
 
-  //   await voter.createPoll("test", [], []);
+    await expect(await voter.createPoll(pollName, admin.address, ["Astana", "Almaty"], [candWallet1.address, candWallet2.address]))
+      .to.emit(voter, "PollCreatedEvent")
+      .withArgs(pollName);
+  })
 
-  //   expect((await voter.getPolls())[0]).to.equals("test")
-  
-  //   // const setGreetingTx = await voter.setGreeting("Hola, mundo!");
-
-  //   // wait until the transaction is mined
-  //   // await setGreetingTx.wait();
-
-  //   // expect(await voter.greet()).to.equal("Hola, mundo!");
-  // });
-
-  it("Vote smart contract", async function(){
+  it("Add Voters", async function(){
     const [admin, voter1, voter2, voter3, candWallet1, candWallet2, pollWallet] = await ethers.getSigners();
-
-    console.log(' admin', admin.address);
-    console.log('voter1', voter1.address);
-    console.log('voter2', voter2.address);
-    console.log('voter3', voter3.address);
-
-    console.log();
-    console.log('candidate-wallet-1', candWallet1.address);
-    console.log('candidate-wallet-2', candWallet2.address);
-    
-    console.log();
-    console.log('poll-wallet', pollWallet.address);
-
-    console.log();
-
-    const pollName = "Cities"
 
     const voting = await ethers.getContractFactory("Voting");
     const voter = await voting.deploy();
-    // await voter.deployed();
+  
+    await expect(await voter.addVoters([voter1.address, voter2.address, voter3.address]))
+      .to.emit(voter, "AddingVotersEvent").withArgs(voter1.address)
+      .and
+      .to.emit(voter, "AddingVotersEvent").withArgs(voter2.address)
+      .and
+      .to.emit(voter, "AddingVotersEvent").withArgs(voter3.address)
+      ;
 
-    await voter.createPoll(pollName, admin.address, ["Astana", "Almaty"], [candWallet1.address, candWallet2.address]);
-    await voter.addVoters([voter1.address, voter2.address, voter3.address]);
+  });
+
+  it("Should vote", async function(){
+    const[admin, voter1, voter2, voter3, candWallet1, candWallet2, pollWallet] = await ethers.getSigners();
+
+    const voting = await ethers.getContractFactory("Voting");
+    const voter = await voting.deploy();
+
+    pollName = "cities";
     
-    console.log("voting.....");
-    await voter.connect(voter1).vote(pollName, 0, { value: ethers.utils.parseEther("0.01") });
-    await voter.connect(voter2).vote(pollName, 1, { value: ethers.utils.parseEther("0.01") });
-    await voter.connect(voter3).vote(pollName, 1, { value: ethers.utils.parseEther("0.01") });
- 
-    console.log("vote complited.");
+    await expect(await voter.createPoll(pollName, admin.address, ["Astana", "Almaty"], [candWallet1.address, candWallet2.address]))
+      .to.emit(voter, "PollCreatedEvent")
+      .withArgs(pollName);
 
-    await voter.connect(admin).closePoll(pollName, { value: ethers.utils.parseUnits("8999085173560582658028", "wei") });
-    // await voter.connect(admin).closePoll(pollName, { value: ethers.utils.parseUnits("1", "ether") });
-    // await voter.connect(admin).closePoll(pollName);
+    await expect(await voter.addVoters([voter1.address, voter2.address, voter3.address]))
+      .to.emit(voter, "AddingVotersEvent").withArgs(voter1.address)
+      .and
+      .to.emit(voter, "AddingVotersEvent").withArgs(voter2.address)
+      .and
+      .to.emit(voter, "AddingVotersEvent").withArgs(voter3.address);
+
+
+    await expect(await voter.connect(voter1).vote(pollName, 0, { value: ethers.utils.parseEther("0.01") })).to.emit(voter, "VoteEvent").withArgs(pollName, 0);
+    await expect(await voter.connect(voter2).vote(pollName, 0, { value: ethers.utils.parseEther("0.01") })).to.emit(voter, "VoteEvent").withArgs(pollName, 0);
+    await expect(await voter.connect(voter3).vote(pollName, 1, { value: ethers.utils.parseEther("0.01") })).to.emit(voter, "VoteEvent").withArgs(pollName, 1);
+   
  
-    //console.log(voter);
-    expect("test").to.equal("test")
+    await expect(await voter.connect(admin).closePoll(pollName, { value: ethers.utils.parseUnits("8999085173560582658028", "wei")}))
+      .to.emit(voter, "PollClosedEvent").withArgs(pollName);
+
+
   });
 });

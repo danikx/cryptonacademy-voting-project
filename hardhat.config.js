@@ -1,4 +1,6 @@
+require('dotenv').config();
 require("@nomiclabs/hardhat-waffle");
+require("@nomiclabs/hardhat-ethers");
 
 
 task("accounts", "Prints the list of accounts", async (taskArgs, hre) => {
@@ -9,9 +11,7 @@ task("accounts", "Prints the list of accounts", async (taskArgs, hre) => {
   }
 });
 
-task("deploy", "deploy smartcontract", async(taskArgs, hre)=>{
-
-});
+const { API_URL, PRIVATE_KEY } = process.env;
 
 module.exports = {
   solidity: "0.8.4",
@@ -22,3 +22,16 @@ module.exports = {
     }
   }
 };
+
+// module.exports = {
+//   solidity: "0.8.4",
+  
+//   defaultNetwork: "ropsten",
+//   networks: {
+//     hardhat: {},
+//     ropsten: {
+//       url: API_URL,
+//       accounts: [`0x${PRIVATE_KEY}`]
+//     }
+//   },
+// };
