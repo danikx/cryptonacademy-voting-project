@@ -88,6 +88,4 @@ describe("Testing Vote smart contract", function () {
     .to.changeEtherBalance(candWallet1, winnerAmount.toString());
 
   });
-
-
 });

@@ -13,25 +13,25 @@ task("accounts", "Prints the list of accounts", async (taskArgs, hre) => {
 
 const { API_URL, PRIVATE_KEY } = process.env;
 
-module.exports = {
-  solidity: "0.8.4",
-  
-  networks:{
-    hardhat:{
-      chainId: 1337
-    }
-  }
-};
-
 // module.exports = {
 //   solidity: "0.8.4",
   
-//   defaultNetwork: "ropsten",
-//   networks: {
-//     hardhat: {},
-//     ropsten: {
-//       url: API_URL,
-//       accounts: [`0x${PRIVATE_KEY}`]
+//   networks:{
+//     hardhat:{
+//       chainId: 1337
 //     }
-//   },
+//   }
 // };
+
+module.exports = {
+  solidity: "0.8.4",
+  
+  defaultNetwork: "rinkeby",
+  networks: {
+    hardhat: {},
+    rinkeby: {
+      url: API_URL,
+      accounts: [`0x${PRIVATE_KEY}`]
+    }
+  },
+};

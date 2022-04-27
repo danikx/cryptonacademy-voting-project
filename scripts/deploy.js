@@ -6,7 +6,7 @@ async function main() {
 
   await voter.deployed();
 
-  console.log("Smart contract deployed to:", voter.address);
+  console.log("Smart contract deployed to address:", voter.address);
 }
 
 main()
