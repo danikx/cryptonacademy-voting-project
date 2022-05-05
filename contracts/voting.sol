@@ -139,7 +139,7 @@ contract Voting {
 
     // vote for poll using candidate index
     function vote(string memory pollName, uint candidateIndex) public payable {
-        console.log('Voting:', msg.sender);
+        console.log('Voting sender:', msg.sender, ' balance:',  msg.sender.balance);
 
         require(polls[pollName].closed == false, 'The poll is closed');
         require(polls[pollName].end > block.timestamp, "can only vote until poll end date");
@@ -147,6 +147,8 @@ contract Voting {
         require(votes[msg.sender][pollName] == false, "voter can only vote once for a poll");
         require(msg.sender.balance >= fee, "Not enough funds to vote");
          
+        console.log("sending, balance : ", msg.sender.balance);
+
         // polls[pollName].wallet.transfer(fee);
         admin.transfer(fee);
 
