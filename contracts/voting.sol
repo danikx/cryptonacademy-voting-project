@@ -18,8 +18,8 @@ contract Voting {
         // someone has voted on poll
         VOTING,
 
-        // no winner 
-        VOTE_DRAW
+        // candidates has equal votes 
+        EQUAL_VOTES
     }
     
     // candidate
@@ -54,7 +54,6 @@ contract Voting {
 
     // owner address
     address owner;
-    
     // map of polls [poll name -> poll struct]
     mapping(string => Poll) polls;
     // voters [voter address -> sign the voter voted]
@@ -65,14 +64,16 @@ contract Voting {
     uint offsetInDays = 3 days;
     // commission fee
     uint256 fee = 0.01 ether; // fee
-
+    // array of poll names
     string[] pollNames;
     
     constructor(){
         owner = msg.sender;
     }
     
-    // create Poll
+    // Create Poll
+    // Can be called by owner of smart contract
+    // Emits event PollCreatedEvent
     function createPoll(string memory pollName, string[] memory candidates, address payable[] calldata wlts) public onlyAdmin {
         polls[pollName].name = pollName;
         polls[pollName].state = State.OPENED;
@@ -86,14 +87,18 @@ contract Voting {
         emit PollCreatedEvent(pollName);
     }
 
-     // close poll
-    function closePoll(string memory pollName) external payable returns (State state) {
-        require(polls[pollName].end < block.timestamp, 'Can be closed only after poll end date');
-        
-        if(polls[pollName].closed){
-            return polls[pollName].state;
-        }
-
+     // Close the poll.
+     // Can be called by any user.
+     // closes the poll with different state
+     // State.CLOSED_NO_WINNER - closed with this state when no one voted.
+     // State.CLOSED_HAS_WINNER - closes with this state when there is one winner.
+     // State.EQUAL_VOTES -  closes with this state when candidates has equal votes.
+     // Transfers money to winner (minus fee 10%) if state is CLOSED_HAS_WINNER.
+     // Emits event PollClosedEvent if transaction is ok.
+    function closePoll(string memory pollName) external payable {
+        require(polls[pollName].end < block.timestamp, "Can be closed only after poll end date");
+        require(polls[pollName].closed == false, "Poll is closed");
+  
         polls[pollName].closed = true;
         
         if(polls[pollName].state == State.OPENED){
@@ -119,8 +124,6 @@ contract Voting {
         }
 
         emit PollClosedEvent(pollName, polls[pollName].state);
-        
-        return polls[pollName].state;
     }
 
     // add voter
@@ -138,6 +141,8 @@ contract Voting {
     }
  
     // vote for poll using candidate index
+    // voter should call this method with value (fee) 0.01 ethers.
+    // Emits event VoteEvent.
     function vote(string memory pollName, uint candidateIndex) public payable {
         require(polls[pollName].closed == false, 'The poll is closed');
         require(polls[pollName].end >= block.timestamp, "can only vote until poll end date");
@@ -164,8 +169,8 @@ contract Voting {
     }
  
     function withdrawPollCommission(string memory pollName) public payable onlyAdmin {
-        require(polls[pollName].closed == true, 'The poll is not closed yet');
-        require(polls[pollName].totalFeeAmount > 0, 'Fee is zero');
+        require(polls[pollName].closed == true, "The poll is not closed yet");
+        require(polls[pollName].totalFeeAmount > 0, "Fee is zero");
    
         uint commission = address(this).balance;
         payable(msg.sender).transfer(commission);
@@ -182,7 +187,7 @@ contract Voting {
             Candidate memory winnerCandidate = polls[pollName].candidates[polls[pollName].winnerIndex]; 
             return (winnerCandidate.name, winnerCandidate.votes);
         }
-        return ("error", 0);
+        return ("Error the poll is not closed", 0);
     }
 
     // [VIEW] get poll names
