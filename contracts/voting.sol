@@ -170,7 +170,7 @@ contract Voting {
  
     function withdrawPollCommission(string memory pollName) public payable onlyAdmin {
         require(polls[pollName].closed == true, "The poll is not closed yet");
-        require(polls[pollName].totalFeeAmount > 0, "Fee is zero");
+        require(polls[pollName].totalFeeAmount > 0, "The poll balance is zero");
    
         uint commission = address(this).balance;
         payable(msg.sender).transfer(commission);

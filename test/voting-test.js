@@ -152,16 +152,6 @@ describe("Voting", function () {
     await expect(await voterContract.pollWinner(pollName)).to.be.contains("Error the poll is not closed")
   });
 
-  it("Should return poll Candidates", async function(){
-    // creat a poll
-    await voterContract.createPoll(pollName, ["Astana", "Almaty"], [candidate1.address, candidate2.address]);
-    // add voters
-    await voterContract.addVoters([voter1.address, voter2.address, voter3.address]);
-
-    //todo
-    // await expect(voterContract.getPollCandidates(pollName))
-  });
-
   it("Should return pollNames", async function(){
     // creat a poll
     await voterContract.createPoll(pollName, ["Astana", "Almaty"], [candidate1.address, candidate2.address]);
@@ -205,5 +195,27 @@ describe("Voting", function () {
     const candidates = await voterContract.getPollCandidates(pollName);
     // test
     expect(candidates.map((i)=> i.name).join()).to.be.equal("Astana,Almaty");
-  })
+  });
+
+  it("should revert withdraw with zero balance", async function(){
+    // creat a poll
+    await voterContract.createPoll(pollName, ["Astana", "Almaty"], [candidate1.address, candidate2.address]);
+    // shift time
+    await network.provider.send("evm_setNextBlockTimestamp", [Date.now() + (23 * 24 * 60 * 60 * 1000)])
+    await network.provider.send("evm_mine") 
+    // creat a poll
+    await voterContract.closePoll(pollName);
+    // trying to withdraw commission
+    await expect(voterContract.connect(owner).withdrawPollCommission(pollName)).to.be.revertedWith("The poll balance is zero");
+  });
+
+  it("should revert not enough funds to vote", async function(){
+    // creat a poll
+    await voterContract.createPoll(pollName, ["Astana", "Almaty"], [candidate1.address, candidate2.address]);
+    // add voters
+    await voterContract.addVoters([voter1.address, voter2.address, voter3.address]); 
+    // test
+    await expect(voterContract.connect(voter1).vote(pollName, 1)).to.be.revertedWith("Not enough funds to vote");
+  });
+
 });
