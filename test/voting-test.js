@@ -1,198 +1,161 @@
 const { expect } = require("chai");
 const { ethers } = require("hardhat");
-const { add } = require("lodash");
-const { pool } = require("workerpool");
 
-describe("Testing Vote smart contract", function () {
-   
-  it("Create a poll", async function(){
-    const voting = await ethers.getContractFactory("Voting");
-    const voter = await voting.deploy(); 
+describe("Voting", function () {
+  let voterContract;
+  let owner;
+  let candidate1;
+  let candidate2;
+  let voter1;
+  let voter2;
+  let voter3;
 
-    const [admin, candWallet1, candWallet2] = await ethers.getSigners();
-  
+  beforeEach(async function(){
+    [owner, candidate1, candidate2, voter1, voter2, voter3] = await ethers.getSigners();
+
+    const voting = await ethers.getContractFactory("Voting", owner);
+    voterContract = await voting.deploy();
+    // voterContract = new GasTracker(await voting.deploy(), { logAfterTx: true, });
+  });
+
+  it("Should create a poll", async function(){  
     pollName = "cities";
 
-    await expect(await voter.createPoll(pollName, ["Astana", "Almaty"], [candWallet1.address, candWallet2.address]))
-      .to.emit(voter, "PollCreatedEvent")
+    await expect(await voterContract.createPoll(pollName, ["Astana", "Almaty"], [candidate1.address, candidate2.address]))
+      .to.emit(voterContract, "PollCreatedEvent")
       .withArgs(pollName);
   })
 
-  it("Add Voters", async function(){
-    const [admin, voter1, voter2, voter3, candWallet1, candWallet2, voter4] = await ethers.getSigners();
-
-    const voting = await ethers.getContractFactory("Voting");
-    const voter = await voting.deploy();
-  
-    await expect(await voter.addVoter(voter4.address)).to.emit(voter, "AddingVotersEvent").withArgs(voter4.address);
-
-    await expect(await voter.addVoters([voter1.address, voter2.address, voter3.address]))
-      .to.emit(voter, "AddingVotersEvent").withArgs(voter1.address)
+  it("Should add Voters", async function(){
+    // add voter
+    await expect(await voterContract.addVoter(voter3.address)).to.emit(voterContract, "AddingVotersEvent").withArgs(voter3.address);
+    // add voters
+    await expect(await voterContract.addVoters([voter1.address, voter2.address]))
+      .to.emit(voterContract, "AddingVotersEvent").withArgs(voter1.address)
       .and
-      .to.emit(voter, "AddingVotersEvent").withArgs(voter2.address)
-      .and
-      .to.emit(voter, "AddingVotersEvent").withArgs(voter3.address);
+      .to.emit(voterContract, "AddingVotersEvent").withArgs(voter2.address);
   });
 
-  it("Should vote", async function(){
-    const[admin, voter1, voter2, voter3, voter4, candWallet1, candWallet2, pollWallet] = await ethers.getSigners();
-
-    const voting = await ethers.getContractFactory("Voting");
-    const voter = await voting.deploy();
-
+  it("Should vote successfully", async function(){
     pollName = "cities";
-    
-    await expect(voter.createPoll(pollName, ["Astana", "Almaty"], [candWallet1.address, candWallet2.address]))
-      .to.emit(voter, "PollCreatedEvent")
-      .withArgs(pollName);
-
-    await expect(await voter.getPolls()).to.be.members([pollName]);
-
-    await expect(voter.addVoters([voter1.address, voter2.address, voter3.address, voter4.address]))
-      .to.emit(voter, "AddingVotersEvent").withArgs(voter1.address)
-      .and
-      .to.emit(voter, "AddingVotersEvent").withArgs(voter2.address)
-      .and
-      .to.emit(voter, "AddingVotersEvent").withArgs(voter3.address)
-      .and
-      .to.emit(voter, "AddingVotersEvent").withArgs(voter4.address);;
-
+    // create a poll
+    await voterContract.createPoll(pollName, ["Astana", "Almaty"], [candidate1.address, candidate2.address]);
+    // add voters
+    await voterContract.addVoters([voter1.address, voter2.address, voter3.address]);
 
     // vote 3 times
-    await expect(voter.connect(voter1).vote(pollName, 0, { value: ethers.utils.parseEther("0.01") })).to.emit(voter, "VoteEvent").withArgs(pollName, 0);
-    await expect(voter.connect(voter2).vote(pollName, 1, { value: ethers.utils.parseEther("0.01") })).to.emit(voter, "VoteEvent").withArgs(pollName, 1);
-    await expect(voter.connect(voter3).vote(pollName, 1, { value: ethers.utils.parseEther("0.01") })).to.emit(voter, "VoteEvent").withArgs(pollName, 1);
-   
+    await expect(voterContract.connect(voter1).vote(pollName, 0, { value: ethers.utils.parseEther("0.01") }))
+      .to.changeEtherBalance(voterContract, ethers.utils.parseEther("0.01"))
+      .and
+      .to.emit(voterContract, "VoteEvent").withArgs(pollName, 0)
+      .and
+      .to.emit(voterContract, "Received").withArgs(voterContract.address, ethers.utils.parseEther("0.01"));
 
-    await expect(voter.sentWinnerCommission(pollName)).to.be.revertedWith("The poll is not closed")
-    // await expect(voter.sentWinnerCommission(pollName)).to.be.reverted("There is no winner in the poll")
+    await expect(voterContract.connect(voter2).vote(pollName, 1, { value: ethers.utils.parseEther("0.01") }))
+      .to.changeEtherBalance(voterContract, ethers.utils.parseEther("0.01"))
+      .and
+      .to.emit(voterContract, "VoteEvent").withArgs(pollName, 1);
 
-    // // check that voter can't close poll because poll is not ended.
-    await expect(voter.connect(voter2).closePoll(pollName)).to.be.revertedWith("Can be closed only after poll end date");
-
-    await network.provider.send("evm_setNextBlockTimestamp", [Date.now() + (3 * 24 * 60 * 60 * 1000)])
-    await network.provider.send("evm_mine") 
-
-    // // close poll (any voter can close poll after poll ends)
-    await expect(await voter.connect(voter2).closePoll(pollName)).to.emit(voter, "PollClosedEvent").withArgs(pollName, 1); // 1 is index of CLOSED_HAS_WINNER
-
-    // // check that voter can't vote after poll is closed.
-    await expect(voter.connect(voter4).vote(pollName, 1)).to.be.revertedWith("The poll is closed");
-
-    // // checkt that winner is Almaty with 2 votes.
-    const v = await voter.pollWinner(pollName); 
-    await expect([v[0], v[1].toNumber()]).to.have.members(["Almaty", 2]); ethers.BigNumber.from(2)
-
-    const winnerAmount = await voter.getWinnerCommission(pollName);
-    
-    await voter.connect(admin).sentWinnerCommission(pollName, { value: ethers.utils.parseUnits(winnerAmount.toString(), "wei")});
-
-    await expect( await voter.connect(admin).sentWinnerCommission(pollName, { value: ethers.utils.parseUnits(winnerAmount.toString(), "wei")}))
-    .to.changeEtherBalance(admin, "-" + winnerAmount.toString());
- 
-    await expect( await voter.connect(admin).sentWinnerCommission(pollName, { value: ethers.utils.parseUnits(winnerAmount.toString(), "wei")}))
-    .to.changeEtherBalance(candWallet2, winnerAmount.toString());
-
+    await expect(await voterContract.connect(voter3).vote(pollName, 1, { value: ethers.utils.parseEther("0.01") }))
+      .to.changeEtherBalance(voterContract, ethers.utils.parseEther("0.01"))
+      .and
+      .to.emit(voterContract, "VoteEvent").withArgs(pollName, 1);
   });
 
-  it("Testing when is no one voted", async function(){
-    const[admin, voter1, voter2, voter3, voter4, candWallet1, candWallet2, pollWallet] = await ethers.getSigners();
-
-    const voting = await ethers.getContractFactory("Voting");
-    const voter = await voting.deploy();
-
-    pollName = "cities";
-    
-    await expect(voter.createPoll(pollName, ["Astana", "Almaty"], [candWallet1.address, candWallet2.address]))
-      .to.emit(voter, "PollCreatedEvent")
-      .withArgs(pollName);
-
-    await network.provider.send("evm_setNextBlockTimestamp", [Date.now() + (10 * 24 * 60 * 60 * 1000)])
+  it("Should close poll", async function(){
+    // create a poll
+    await voterContract.createPoll(pollName, ["Astana", "Almaty"], [candidate1.address, candidate2.address]);
+    // shift time
+    await network.provider.send("evm_setNextBlockTimestamp", [Date.now() + (4 * 24 * 60 * 60 * 1000)])
     await network.provider.send("evm_mine") 
-  
     // close poll (any voter can close poll after poll ends)
-    await expect(await voter.connect(voter2).closePoll(pollName)).to.emit(voter, "PollClosedEvent").withArgs(pollName, 0); // 0 is index of CLOSED_NO_WINNER
-  
+    await expect(await voterContract.connect(voter2).closePoll(pollName)).to.emit(voterContract, "PollClosedEvent").withArgs(pollName, 0); // 0 is index of CLOSED_NO_WINNER
     // check that voter can't vote after poll is closed.
-    await expect(voter.connect(voter4).vote(pollName, 1)).to.be.revertedWith("The poll is closed");
-  
-    // check that winner is Astana with 2 votes.
-    const v = await voter.pollWinner(pollName);
-
-    const candidates = await voter.getPollCandidates(pollName);
-    console.log(candidates);
+    await expect(voterContract.connect(voter2).vote(pollName, 1)).to.be.revertedWith("The poll is closed");
   });
-  
-  it("Only admin can create the poll", async function(){
-    const[admin, voter1, voter2, voter3, voter4, candWallet1, candWallet2, pollWallet] = await ethers.getSigners();
-
-    const voting = await ethers.getContractFactory("Voting");
-    const voter = await voting.deploy();
-    
-    await expect(voter.connect(voter2).createPoll("cities", ["Astana", "Almaty"], [candWallet1.address, candWallet2.address]))
-      .to.be.revertedWith("Only admin");
+ 
+  it("Only owner can create the poll", async function(){ 
+    await expect(voterContract.connect(voter2).createPoll("cities", ["Astana", "Almaty"], [candidate1.address, candidate2.address])).to.be.revertedWith("Only owner");
   });
 
-  it("Trying to get winner commision when the poll is not closed", async function(){
-    const[admin, voter1, voter2, voter3, voter4, candWallet1, candWallet2, pollWallet] = await ethers.getSigners();
-
-    const voting = await ethers.getContractFactory("Voting");
-    const voter = await voting.deploy();
-    
-    await voter.createPoll("cities", ["Astana", "Almaty"], [candWallet1.address, candWallet2.address]);
-
-    await expect(voter.getWinnerCommission("cities")).to.be.revertedWith("The poll is not closed")
-  });
-
-  it("Trying to get winner commission when the poll has not winnner", async function(){
-    const[admin, voter1, voter2, voter3, voter4, candWallet1, candWallet2, pollWallet] = await ethers.getSigners();
-
-    const voting = await ethers.getContractFactory("Voting");
-    const voter = await voting.deploy();
-    
-    await voter.createPoll("cities", ["Astana", "Almaty"], [candWallet1.address, candWallet2.address]);
-
-    await network.provider.send("evm_setNextBlockTimestamp", [Date.now() + (15 * 24 * 60 * 60 * 1000)])
+  it("Owner can withdraw fee after poll is closed", async function(){
+    // creat a poll
+    await voterContract.createPoll(pollName, ["Astana", "Almaty"], [candidate1.address, candidate2.address]);
+    // add voters
+    await voterContract.addVoters([voter1.address, voter2.address, voter3.address]);
+    // vote
+    await voterContract.connect(voter1).vote(pollName, 1, { value: ethers.utils.parseEther("0.01") });
+    await voterContract.connect(voter2).vote(pollName, 0, { value: ethers.utils.parseEther("0.01") });
+    await voterContract.connect(voter3).vote(pollName, 1, { value: ethers.utils.parseEther("0.01") });
+    // shift time
+    await network.provider.send("evm_setNextBlockTimestamp", [Date.now() + (5 * 24 * 60 * 60 * 1000)])
     await network.provider.send("evm_mine") 
-
-    await voter.closePoll("cities");
-
-    await expect(voter.getWinnerCommission("cities")).to.be.revertedWith("There is no winner in the poll");
-    await expect(voter.sentWinnerCommission("cities")).to.be.revertedWith("There is no winner in the poll"); 
+    // close poll
+    await expect(await voterContract.connect(voter2).closePoll(pollName))
+            .to.changeEtherBalance(voterContract, ethers.utils.parseEther("-0.027"))
+            .and
+            .to.changeEtherBalance(candidate2, ethers.utils.parseEther("0.027"));  
+    
+    // claim as owner commission from poll
+    await expect(await voterContract.connect(owner).withdrawPollCommission(pollName))
+    .to.changeEtherBalance(owner, ethers.utils.parseEther("0.003"))
+    .and
+    .to.emit(voterContract, "OwnerWithdrawCommissionEvent").withArgs(pollName, ethers.utils.parseEther("0.003"));
   });
 
-  it("checking while voting", async function(){
-    const[admin, voter1, voter2, voter3, voter4, candWallet1, candWallet2, dump] = await ethers.getSigners();
+
+  // console.log("last balance", await owner.getBalance());
+    // console.log("last balance contract", await voterContract.getBalance());
     
-    // const randomWallet = await ethers.Wallet.createRandom();
-    // const voter5 = await randomWallet.connect(await ethers.getDefaultProvider());
-    // console.log('random wallet', await voter5.getBalance());
+    // const ownerBalanceAfter = await owner.getBalance();
 
-    // console.log(voter3.address);
-       
-    const voting = await ethers.getContractFactory("Voting");
-    const voter = await voting.deploy();
+    // console.log("owner balance before", ownerBalanceBefor.toString());
+    // console.log("owner balance after ", ownerBalanceAfter.toString());
+
+    // const balance = await candidate2.getBalance();
+    // console.log(balance.toString());
+   
+  // it("Trying to get winner commision when the poll is not closed", async function(){
+  //   await voter.createPoll("cities", ["Astana", "Almaty"], [candWallet1.address, candWallet2.address]);
+  //   await expect(voter.getWinnerCommission("cities")).to.be.revertedWith("The poll is not closed")
+  // });
+
+  // it("Trying to get winner commission when the poll has not winnner", async function(){  
+  //   await voter.createPoll("cities", ["Astana", "Almaty"], [candWallet1.address, candWallet2.address]);
+  //   await network.provider.send("evm_setNextBlockTimestamp", [Date.now() + (15 * 24 * 60 * 60 * 1000)])
+  //   await network.provider.send("evm_mine") 
+  //   await voter.closePoll("cities");
+  //   await expect(voter.getWinnerCommission("cities")).to.be.revertedWith("There is no winner in the poll");
+  //   await expect(voter.sentWinnerCommission("cities")).to.be.revertedWith("There is no winner in the poll"); 
+  // });
+
+  // it("checking while voting", async function(){  
+  //   // const randomWallet = await ethers.Wallet.createRandom();
+  //   // const voter5 = await randomWallet.connect(await ethers.getDefaultProvider());
+  //   // console.log('random wallet', await voter5.getBalance());       
+  //   const voting = await ethers.getContractFactory("Voting");
+  //   const voter = await voting.deploy();
     
-    voter.addVoters([voter1.address, voter2.address]);
+  //   voter.addVoters([voter1.address, voter2.address]);
 
-    await voter.createPoll("cities", ["Astana", "Almaty"], [candWallet1.address, candWallet2.address]);
+  //   await voter.createPoll("cities", ["Astana", "Almaty"], [candWallet1.address, candWallet2.address]);
 
-    voter.connect(voter1).vote(pollName, 0, { value: ethers.utils.parseEther("0.01") });
+  //   voter.connect(voter1).vote(pollName, 0, { value: ethers.utils.parseEther("0.01") });
 
-    // only registered voters can vote.
-    await expect(voter.connect(voter4).vote(pollName, 1)).to.be.revertedWith("only voters can vote");
+  //   // only registered voters can vote.
+  //   await expect(voter.connect(voter4).vote(pollName, 1)).to.be.revertedWith("only voters can vote");
 
-    // can vote only once
-    await expect(voter.connect(voter1).vote(pollName, 0)).to.be.revertedWith("voter can only vote once for a poll");
+  //   // can vote only once
+  //   await expect(voter.connect(voter1).vote(pollName, 0)).to.be.revertedWith("voter can only vote once for a poll");
 
-    await network.provider.send("evm_setNextBlockTimestamp", [Date.now() + (25 * 24 * 60 * 60 * 1000)])
-    await network.provider.send("evm_mine") 
+  //   await network.provider.send("evm_setNextBlockTimestamp", [Date.now() + (25 * 24 * 60 * 60 * 1000)])
+  //   await network.provider.send("evm_mine") 
 
-    // can only vote until poll end date
-    await expect(voter.connect(voter2).vote(pollName, 1, { value: ethers.utils.parseEther("0.01") })).to.be.revertedWith("can only vote until poll end date");
+  //   // can only vote until poll end date
+  //   await expect(voter.connect(voter2).vote(pollName, 1, { value: ethers.utils.parseEther("0.01") })).to.be.revertedWith("can only vote until poll end date");
     
-    await voter.closePoll("cities");
-  });
+  //   await voter.closePoll("cities");
+  // });
 
   
 });
