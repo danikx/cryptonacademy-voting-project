@@ -218,4 +218,15 @@ describe("Voting", function () {
     await expect(voterContract.connect(voter1).vote(pollName, 1)).to.be.revertedWith("Not enough funds to vote");
   });
 
+  it("Should vote only until the poll end date", async function(){
+    // add voters
+    await voterContract.addVoters([voter1.address, voter2.address, voter3.address]);
+    // creat a poll
+    await voterContract.createPoll(pollName, ["Astana", "Almaty"], [candidate1.address, candidate2.address]);
+    // shift time
+    await network.provider.send("evm_setNextBlockTimestamp", [Date.now() + (27 * 24 * 60 * 60 * 1000)]);
+    await network.provider.send("evm_mine"); 
+    // test
+    await expect(voterContract.connect(voter1).vote(pollName, 1, { value: ethers.utils.parseEther("0.01") })).to.be.revertedWith("can only vote until poll end date");
+  });
 });
