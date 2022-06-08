@@ -74,7 +74,7 @@ contract Voting {
     // Create Poll
     // Can be called by owner of smart contract
     // Emits event PollCreatedEvent
-    function createPoll(string memory pollName, string[] memory candidates, address payable[] calldata wlts) public onlyAdmin {
+    function createPoll(string memory pollName, string[] memory candidates, address payable[] calldata wlts) public onlyOwner {
         polls[pollName].name = pollName;
         polls[pollName].state = State.OPENED;
         polls[pollName].end = block.timestamp + offsetInDays;
@@ -100,7 +100,7 @@ contract Voting {
         require(polls[pollName].closed == false, "Poll is closed");
   
         polls[pollName].closed = true;
-        
+ 
         if(polls[pollName].state == State.OPENED){
             polls[pollName].state = State.CLOSED_NO_WINNER;
 
@@ -127,21 +127,21 @@ contract Voting {
     }
 
     // add voter
-    function addVoter(address payable voter) external onlyAdmin() {
+    function addVoter(address payable voter) external onlyOwner {
         voters[voter] = true;
         emit AddingVotersEvent(voter);
     }
 
     // add collection of voters
-    function addVoters(address[] calldata _voters) external onlyAdmin() {
+    function addVoters(address[] calldata _voters) external onlyOwner {
         for(uint i = 0; i < _voters.length; i++) {
             voters[_voters[i]] = true;
              emit AddingVotersEvent(_voters[i]);
         }
     }
  
-    // vote for poll using candidate index
-    // voter should call this method with value (fee) 0.01 ethers.
+    // Vote for poll using candidate index
+    // Voter should call this method with value (fee) 0.01 ethers.
     // Emits event VoteEvent.
     function vote(string memory pollName, uint candidateIndex) public payable {
         require(polls[pollName].closed == false, 'The poll is closed');
@@ -168,7 +168,10 @@ contract Voting {
         emit VoteEvent(pollName, candidateIndex);
     }
  
-    function withdrawPollCommission(string memory pollName) public payable onlyAdmin {
+    // Claim poll commission.
+    // Can be called only by smart contract owner.
+    // Emits event 'OwnerWithdrawCommissionEvent' with pollName and commission.
+    function withdrawPollCommission(string memory pollName) public payable onlyOwner {
         require(polls[pollName].closed == true, "The poll is not closed yet");
         require(polls[pollName].totalFeeAmount > 0, "The poll balance is zero");
    
@@ -177,6 +180,7 @@ contract Voting {
         emit OwnerWithdrawCommissionEvent(pollName, commission);
     }
 
+    // returns smart contract balance.
     function getBalance() public view returns(uint balance) {
         return address(this).balance;
     }
@@ -191,7 +195,7 @@ contract Voting {
     }
 
     // [VIEW] get poll names
-    function getPolls() view external onlyAdmin() returns(string[] memory) {
+    function getPolls() view external onlyOwner() returns(string[] memory) {
         return pollNames;
     }
 
@@ -201,7 +205,7 @@ contract Voting {
     }
      
     // [MODIFIER]
-    modifier onlyAdmin() {
+    modifier onlyOwner() {
         require(msg.sender == owner, "Only owner");
          // Do not forget the "_;"! It will
         // be replaced by the actual function
