@@ -94,11 +94,11 @@ describe("Voting", function () {
     await expect(voterContract.connect(voter2).vote(pollName, 1)).to.be.revertedWith("The poll is closed");
   });
  
-  it("Only owner can create the poll", async function(){ 
+  it("Should allow only owner to create the poll", async function(){ 
     await expect(voterContract.connect(voter2).createPoll("cities", ["Astana", "Almaty"], [candidate1.address, candidate2.address])).to.be.revertedWith("Only owner");
   });
 
-  it("Owner can withdraw fee after poll is closed", async function(){
+  it("Should allow owner to withdraw fee after poll is closed", async function(){
     // creat a poll
     await voterContract.createPoll(pollName, ["Astana", "Almaty"], [candidate1.address, candidate2.address]);
     // add voters
@@ -143,7 +143,7 @@ describe("Voting", function () {
     await expect(voterContract.connect(voter1).vote(pollName, 1, { value: ethers.utils.parseEther("0.01") })).to.be.revertedWith("voter can only vote once for a poll") 
   });
 
-  it("Should return pollWinner", async function(){
+  it("Should return pollWinner Almaty", async function(){
     // creat a poll
     await voterContract.createPoll(pollName, ["Astana", "Almaty"], [candidate1.address, candidate2.address]);
     // add voters
@@ -159,6 +159,24 @@ describe("Voting", function () {
     await voterContract.connect(voter2).closePoll(pollName);
     // test
     await expect(await voterContract.pollWinner(pollName)).to.be.contains("Almaty");
+  });
+
+  it("Should return pollWinner Astana", async function(){
+    // creat a poll
+    await voterContract.createPoll(pollName, ["Astana", "Almaty"], [candidate1.address, candidate2.address]);
+    // add voters
+    await voterContract.addVoters([voter1.address, voter2.address, voter3.address]);
+    // vote
+    await voterContract.connect(voter1).vote(pollName, 0, { value: ethers.utils.parseEther("0.01") });
+    await voterContract.connect(voter2).vote(pollName, 0, { value: ethers.utils.parseEther("0.01") });
+    await voterContract.connect(voter3).vote(pollName, 0, { value: ethers.utils.parseEther("0.01") });
+    // shift the time
+    await network.provider.send("evm_setNextBlockTimestamp", [Date.now() + (14 * 24 * 60 * 60 * 1000)])
+    await network.provider.send("evm_mine") 
+    // close poll
+    await voterContract.connect(voter2).closePoll(pollName);
+    // test
+    await expect(await voterContract.pollWinner(pollName)).to.be.contains("Astana");
   });
 
   it("Should return error when called get pollWinner", async function(){
@@ -186,7 +204,7 @@ describe("Voting", function () {
     await expect(await voterContract.getBalance()).to.be.equal(ethers.utils.parseEther("0.01").toString());
   });
 
-  it("should be ok trying to close the poll twice", async function(){
+  it("Should be ok trying to close the poll twice", async function(){
     // creat a poll
     await voterContract.createPoll(pollName, ["Astana", "Almaty"], [candidate1.address, candidate2.address]);
     // add voters
@@ -204,7 +222,7 @@ describe("Voting", function () {
     await expect(voterContract.connect(voter3).closePoll(pollName)).to.be.revertedWith("Poll is closed");
   });
 
-  it("should return the poll candidates", async function(){
+  it("Should return the poll candidates", async function(){
     // creat a poll
     await voterContract.createPoll(pollName, ["Astana", "Almaty"], [candidate1.address, candidate2.address]);
     // get candidates
@@ -213,7 +231,7 @@ describe("Voting", function () {
     expect(candidates.map((i)=> i.name).join()).to.be.equal("Astana,Almaty");
   });
 
-  it("should revert withdraw with zero balance", async function(){
+  it("Should revert withdraw with zero balance", async function(){
     // creat a poll
     await voterContract.createPoll(pollName, ["Astana", "Almaty"], [candidate1.address, candidate2.address]);
     // shift the time
@@ -225,7 +243,7 @@ describe("Voting", function () {
     await expect(voterContract.connect(owner).withdrawPollCommission(pollName)).to.be.revertedWith("The poll balance is zero");
   });
 
-  it("should revert not enough funds to vote", async function(){
+  it("Should revert not enough funds to vote", async function(){
     // creat a poll
     await voterContract.createPoll(pollName, ["Astana", "Almaty"], [candidate1.address, candidate2.address]);
     // add voters
@@ -240,7 +258,8 @@ describe("Voting", function () {
     // creat a poll
     await voterContract.createPoll(pollName, ["Astana", "Almaty"], [candidate1.address, candidate2.address]);
     // shift the time
-    await shiftTheTime(27);
+    await network.provider.send("evm_setNextBlockTimestamp", [Date.now() + (27 * 24 * 60 * 60 * 1000)]);
+    await network.provider.send("evm_mine"); 
     // test
     await expect(voterContract.connect(voter1).vote(pollName, 1, { value: ethers.utils.parseEther("0.01") })).to.be.revertedWith("can only vote until poll end date");
   });
@@ -263,26 +282,6 @@ describe("Voting", function () {
     await voterContract.createPoll(pollName, ["Astana", "Almaty"], [candidate1.address, candidate2.address]);
     // vote
     await expect(voterContract.connect(voter1).vote(pollName, 1, { value: ethers.utils.parseEther("0.01") })).to.be.revertedWith("only voters can vote");
-
   });
 
-  // it("Should closed with OPENED state", async function(){
-  //   // add voter
-  //   await voterContract.connect(owner).addVoter(voter1.address);
-  //   // create a poll
-  //   await voterContract.createPoll(pollName, ["Astana", "Almaty"], [candidate1.address, candidate2.address]);
-  //   // vote
-  //   await voterContract.connect(voter1).vote(pollName, 1, { value: ethers.utils.parseEther("0.01") });
-  //   // shift the time
-  //   await network.provider.send("evm_setNextBlockTimestamp", [Date.now() + (55 * 24 * 60 * 60 * 1000)]);
-  //   await network.provider.send("evm_mine"); 
-  //   // close poll (any voter can close poll after poll ends)
-  //   await expect(await voterContract.connect(voter2).closePoll(pollName)).to.emit(voterContract, PollClosedEvent).withArgs(pollName, CLOSED_HAS_WINNER);
-  // });
-
 });
-
-async function shiftTheTime(days){
-  await network.provider.send("evm_setNextBlockTimestamp", [Date.now() + (days * 24 * 60 * 60 * 1000)]);
-  await network.provider.send("evm_mine"); 
-}
