@@ -1,16 +1,30 @@
-require('dotenv').config();
+require('dotenv').config({path: __dirname+'/.env'});
 require("@nomiclabs/hardhat-waffle");
 require("@nomiclabs/hardhat-ethers");
 require('solidity-coverage')
 require("hardhat-gas-trackooor");
 
-
 task("accounts", "Prints the list of accounts", async (taskArgs, hre) => {
+  console.log("args", taskArgs);
+
   const accounts = await hre.ethers.getSigners();
 
   for (const account of accounts) {
     console.log(account.address);
   }
+});
+
+task("deploy", "Deploy smart contract", async (taskArgs, hre) =>{
+  console.log("Deploying to localhost");
+  console.log(taskArgs);
+
+  const Voting = await hre.ethers.getContractFactory("Voting");
+  const voter = await Voting.deploy();
+
+  await voter.deployed();
+
+  console.log("Smart contract deployed to address:", voter.address);
+
 });
 
 const { API_URL, PRIVATE_KEY } = process.env;

@@ -37,6 +37,7 @@ contract Voting {
         uint winnerIndex;
         State state;
         uint totalFeeAmount;
+        uint totalVotes;
     }
     
     // poll has been created event
@@ -99,12 +100,13 @@ contract Voting {
         require(polls[pollName].end < block.timestamp, "Can be closed only after poll end date");
         require(polls[pollName].closed == false, "Poll is closed");
   
+        // mark poll as closed
         polls[pollName].closed = true;
- 
-        if(polls[pollName].state == State.OPENED){
-            polls[pollName].state = State.CLOSED_NO_WINNER;
 
-        } else if(polls[pollName].state == State.VOTING){
+        // if there is no total votes it means that no one voted.
+        if(polls[pollName].totalVotes == 0){
+            polls[pollName].state = State.CLOSED_NO_WINNER;
+        } else {
             uint maxVotes = polls[pollName].candidates[0].votes;
             uint index = 0;
 
@@ -161,6 +163,8 @@ contract Voting {
 
         // update total fee amount
         polls[pollName].totalFeeAmount += msg.value;
+        // update total votes counter
+        polls[pollName].totalVotes += 1;
  
         // transfer fee to smart contract
         payable(address(this)).transfer(msg.value);
